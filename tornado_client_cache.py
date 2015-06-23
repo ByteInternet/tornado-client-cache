@@ -59,7 +59,7 @@ def patch(cache_name='cache'):
     AsyncHTTPClient.cache = Cache(cache_name)
     AsyncHTTPClient.pending_requests = {}
 
-    orig_fetch = AsyncHTTPClient.fetch
+    AsyncHTTPClient.orig_fetch = AsyncHTTPClient.fetch
 
     def fetch(self, request, callback=None, raise_error=True, **kwargs):
         if not isinstance(request, HTTPRequest):
@@ -81,7 +81,7 @@ def patch(cache_name='cache'):
             future.set_result(response)
             return future
 
-        future = orig_fetch(self, request, callback, raise_error, **kwargs)
+        future = AsyncHTTPClient.orig_fetch(self, request, callback, raise_error, **kwargs)
 
         self.pending_requests[key] = future
 
@@ -94,3 +94,8 @@ def patch(cache_name='cache'):
         return future
 
     AsyncHTTPClient.fetch = fetch
+
+def unpatch():
+    AsyncHTTPClient.fetch = AsyncHTTPClient.orig_fetch
+    del AsyncHTTPClient.cache
+    del AsyncHTTPClient.pending_requests
