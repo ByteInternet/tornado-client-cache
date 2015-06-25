@@ -1,13 +1,19 @@
 import hashlib
+import os
+import re
 from tornado.concurrent import Future
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient
-from sqlitedict import SqliteDict
+# from sqlitedict import SqliteDict
 from tornado.httputil import HTTPHeaders
-
+import pickle
 
 class Cache(object):
     def __init__(self, cache_name='cache'):
-        self.backend = SqliteDict(cache_name + '.sqlite', 'cache', autocommit=True)
+        self.cache_name = cache_name
+        if not os.path.isdir(cache_name):
+            os.makedirs(cache_name)
+
+#        self.backend = SqliteDict(cache_name + '.sqlite', 'cache', autocommit=True)
 
     def create_key(self, request):
         """
@@ -17,21 +23,27 @@ class Cache(object):
         :return:
         """
         key = hashlib.sha256()
-        key.update(request.method.upper())
-        key.update(request.url)
+        key.update(request.method.upper().encode('ascii'))
+        key.update(request.url.encode('ascii'))
         if request.body:
             key.update(request.body)
-        return key.hexdigest()
+
+        url_filename = re.sub(r'[^\w\d\.\-]', '_', request.url) # .encode('ascii')
+        return url_filename + '-' + key.hexdigest()
 
     def get_response_and_time(self, key):
         try:
-            resp = self.backend[key]
-            return self._decode_headers(resp)
-        except KeyError:
+            with open(self.cache_name + '/' + key, 'rb') as fh:
+                # resp = self.backend[key]
+                data = pickle.load(fh)
+                return self._decode_headers(data)
+        except (OSError, KeyError):
             return None
 
     def save_response(self, key, response):
-        self.backend[key] = self._encode_headers(response)
+        with open(self.cache_name + '/' + key, 'wb') as fh:
+            pickle.dump(self._encode_headers(response), fh)
+        # self.backend[key] = self._encode_headers(response)
 
     def _encode_headers(self, response):
         def encode(headers):
